@@ -1,0 +1,89 @@
+ ~/assig/grau-g/Viewer/GLarenaSL
+
+
+Functions:
+Distance(pos1, pos2);
+fract(x) -> part fraccionària de x
+mod(x, y) -> x mòdul y 
+mix(a, b, t) -> interpolació linial entre a i b  a*(1 - t) + bt
+sin(x) -> sinus de x (en radians)
+
+sinusoïdals: A * sin(2*PI*f*t + alpha)
+A -> amplitud
+f -> frequència
+t -> temps (segons)
+alpha -> fase
+
+Quan normalitzar?
+ Els vectors (N, L, R, V) que apareixen a les equacions d'il·luminació han de ser unitaris (normalitzar abans)
+ En general, la longitud d'un vector no es preserva:
+	quan es multiplica per una matriu (normalMatrix * normal)
+	quan s'interpola linialment (ex. out vec3 N)
+ On normalitzar? Immediatament abans de fer els càlculs que assumeixen que el vector és unitari:
+	al VS si es fa il·luminació per vèrtex
+	al FS si es fa il·luminació per fragment
+
+Matrius rotacions
+mat3 m = mat3(vec3(cos(vel), 0, -sin(vel)), vec3(0, 1, 0), vec3(sin(vel), 0, cos(vel))); //rotacio y
+mat3 m = mat3(vec3(1, 0, 0), vec3(0, cos(vel), sin(vel)), vec3(0, -sin(vel), cos(vel))); //rotacio x
+mat3 m = mat3(vec3(cos(vel), sin(vel), 0), vec3(-sin(vel), cos(vel), 0), vec3(0, 0, 1)); //rotacio z
+
+Càlcul de la il·luminació per vèrtex amb el model de Phong
+	(ka*Ia + kd*Id(N*L) + Ks*Is(R*V)^s 
+	ka, kd, ks = reflectivitat ambient, difosa i especular del material (MATERIAL)
+	s = shininess del material
+	Ia, Id, Is = propietats ambient, difosa i especular de la llum (LLUM)
+	N = vector normal unitari
+	L = vector unitari cap a la font de llum
+	V = vector unitari del vèrtex cap a la càmera
+	R = reflexió del vector L respecte N. Es pot calcular com R = 2(N*L)N - L
+		
+Cal evitar restar il·luminació quan els productes escalars N*L o R*V són negatius.
+	max(0.0, dot(N, L)) // max(0.0, dot(R, V))
+
+Textures:
+	uniform smapler2D myMap;
+	in vec2 vtexCoord;
+	texture(myMap, vtexCoord);
+
+void main()
+{
+    vec3 N = normalize(normalMatrix * normal);
+	vec3 P = normalize((modelViewMatrix * vec4(vertex, 1.0)).xyz);	//object -> eye space
+	vec3 V = -P;    
+	vec3 L = normalize((lightPosition).xyz - P);
+    vec3 R = 2 * (dot(N, L))* N - L;
+    frontColor = matAmbient * lightAmbient + matDiffuse * lightDiffuse * max(0.0, dot(N, L)) + matSpecular * lightSpecular * pow(max(0.0, dot(R, V)), matShininess);
+    vtexCoord = texCoord;
+    gl_Position = modelViewProjectionMatrix * vec4(vertex, 1.0);
+}
+
+Uniforms:
+uniform vec3 boundingBoxMin; //cantonada de la capsa englobant 
+uniform vec3 boundingBoxMax; //cantonada de la capsa englobant
+uniform vec2 mousePosition; //pos del cursor(windowspace);origenBL
+uniform float time; //temps(segons)desde la darrera compilació
+
+uniform vec4 lightAmbient;
+uniform vec4 lightDiffuse;
+uniform vec4 lightSpecular;
+uniform vec4 lightPosition;//(sempre estarà en eyespace)
+
+uniform vec4 matAmbient;
+uniform vec4 matDiffuse;
+uniform vec4 matSpecular;
+uniform float matShininess;
+
+uniform mat4 modelMatrix;
+uniform mat4 viewMatrix;
+uniform mat4 projectionMatrix;
+uniform mat4 modelViewMatrix;
+uniform mat4 modelViewProjectionMatrix;
+uniform mat4 modelMatrixInverse;
+uniform mat4 viewMatrixInverse;
+uniform mat4 projectionMatrixInverse;
+uniform mat4 modelViewMatrixInverse;
+uniform mat4 modelViewProjectionMatrixInverse;
+uniform mat3 normalMatrix;
+
+

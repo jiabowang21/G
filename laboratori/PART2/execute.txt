@@ -1,0 +1,148 @@
+ 
+ librerias
+ 
+ #include <QPainter>
+ 
+ #include <cstudio>
+ 
+ #include <QOpenGLShader>
+ 
+ #include <QOpenGLShaderProgram>
+ 
+ Acceder a la escena actual -> Scene* scn = scene();
+ objetos de la escena actual -> scn->objects().size();
+    Calcula el numero de vertices (nver), el numero de poligonos (npol) y el numero de poligonos que son triangulos (ntri)
+    for (int i = 0; i < (int)scn->objects().size(); ++i) {
+    	const Object &obj=scn->objects()[i];
+    	for (int j=0; j<(int)obj.faces().size(); ++j) {
+      		const Face &face=obj.faces()[j];
+      		int fver=face.numVertices();
+      		++npol;
+      		nver+=fver;
+      		ntri+=fver==3;
+    	}
+  	}
+  	
+atributos privados en .h:
+    QGLShaderProgram* program;  //programa
+    QGLShader *fs, *vs;         //vertex shader y fragment shader
+	QElapsedTimer elapsedTimer; //timer
+	QPainter painter;              //painter para pintar
+    GLuint textureId0, textureId1;  //texturas
+
+El mètode onPluginLoad haurà de carregar, compilar i muntar el shader. 
+El mètode preFrame() els haurà d'activar i donar un valor apropiat a l’uniform float time (podeu feu servir timers de Qt) i a la resta d’uniforms que feu servir; 
+el mètode postFrame() els haurà de desactivar.
+
+cargar, compilar i montar shaders:
+
+void AnimateVertices::onPluginLoad()
+{
+  	// Carregar shader, compile & link 
+  	QString vs_src =
+		"#version 330 core\n"
+		"layout (location=0) in vec3 vertex;" 
+		"layout (location=1) in vec3 normal;" 
+		"layout (location=2) in vec3 color;" 
+		"layout (location=3) in vec2 texCoord;" 
+		"out vec4 frontColor;" 
+		"out vec2 vtexCoord;" 
+		"uniform mat4 modelViewProjectionMatrix;" 
+		"uniform mat3 normalMatrix;" 
+		"uniform float time;" 
+		"uniform float amplitude = 0.1;" 
+		"uniform float freq = 1;" 
+		"const float PI = acos(-1.0);" 
+		"void main() {" 
+			"vec3 V = vertex + normal * abs(amplitude*sin(PI * 2 * freq * time));" 
+			"vec3 N = normalize(normalMatrix*normal);" 
+			"frontColor = vec4(vec3(N.z),1);" 
+			"gl_Position = modelViewProjectionMatrix*vec4(V, 1);" 
+		"}";
+  	vs = new QGLShader(QGLShader::Vertex, this);
+  	vs -> compileSourceCode(vs_src);
+ 	cout << "VS log:" << vs->log().toStdString() << endl;
+  	
+	QString fs_src=
+		"#version 330 core\n"
+		"in vec4 frontColor;" 
+		"out vec4 fragColor;" 
+		"void main() {" 
+			"fragColor=frontColor;" 
+		"}";
+  	fs = new QGLShader(QGLShader::Fragment, this);
+  	fs -> compileSourceCode(fs_src);
+  	cout << "FS log:" << fs->log().toStdString() << endl;
+ 
+	program = new QGLShaderProgram(this);
+  	program->addShader(vs);
+  	program->addShader(fs);
+  	program->link();
+  	cout << "Link log:" << program->log().toStdString() << endl;	
+	//start timer
+  	elapsedTimer.start();
+}
+
+//poner los uniform
+
+void AnimateVertices::preFrame()
+{
+	// bind shader and define uniforms
+  	program -> bind();
+  	program -> setUniformValue("time", float(elapsedTimer.elapsed()/1000.0f));
+  	QMatrix3x3 NM = camera() -> viewMatrix().normalMatrix();
+  	program -> setUniformValue("normalMatrix", NM); 
+  	QMatrix4x4 MVP = camera() -> projectionMatrix()*camera() -> viewMatrix();
+  	program -> setUniformValue("modelViewProjectionMatrix", MVP); 
+}
+
+//descativar
+void AnimateVertices::postFrame() {
+  	// unbind shader
+  	program->release();
+}
+
+//pintar por pantalla
+    painter.begin(glwidget());
+    QFont font;
+    font.setPixelSize(15);
+    painter.setFont(font);
+    int x = 20;
+    int y = 350;
+
+    painter.drawText(x, y, QString("INFO: "));
+    painter.drawText(x, y + 20, QString(" - Objectes: %1").arg(nobj));
+    painter.drawText(x, y + 40, QString(" - Polígons: %1").arg(npol));
+    painter.drawText(x, y + 60, QString(" - Vèrtexs: %1").arg(nver));
+    painter.drawText(x, y + 80, QString(" - Triangles: %1").arg(ntri));
+    if (npol != 0) painter.drawText(x, y + 100, QString(" - Percentatge de triangles: %1%").arg(double(ntri/npol) * 100));
+    else painter.drawText(x, y + 100, QString(" - Percentatge de triangles: NULL"));
+    painter.end();
+    
+Iluminacio per plugins -> S7 -> iluminacioFragmentShaders
+
+//teclat
+void ResaltatObjecteTeclat::keyPressEvent(QKeyEvent *e) {
+    if (e->key() >= Qt::Key_0 && e->key() <= Qt::Key_9){
+        int obj = e->key() - Qt::Key_0;
+        if (obj < 0 || obj >= (int)scene()->objects().size()) obj = -1;
+        scene() -> setSelectedObject(obj);
+        glwidget() -> update();
+    }
+}
+
+Shaders per path relatius
+
+    GLWidget & g = *glwidget();
+    g.makeCurrent();
+    // Carregar shader, compile & link 
+    vs = new QOpenGLShader(QOpenGLShader::Vertex, this);
+    vs->compileSourceFile(g.getPluginPath()+"/../distort/distort.vert");
+
+    fs = new QOpenGLShader(QOpenGLShader::Fragment, this);
+    fs->compileSourceFile(g.getPluginPath()+"/../distort/distort.frag");
+
+    program = new QOpenGLShaderProgram(this);
+    program->addShader(vs);
+    program->addShader(fs); 
+    program->link();
